@@ -27,7 +27,7 @@ flutter run -d chrome --web-renderer html
 ## Build untuk Produksi
 
 ```bash
-flutter build web --web-renderer html --release --no-tree-shake-icons
+flutter build web --release --no-tree-shake-icons
 ```
 
 Output ada di `build/web/`.
