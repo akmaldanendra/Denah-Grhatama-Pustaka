@@ -1,0 +1,35 @@
+{
+    "name": "Peta Interaktif Grhatama Pustaka",
+    "short_name": "Grhatama Pustaka",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#C62828",
+    "theme_color": "#C62828",
+    "description": "Peta interaktif gedung Grhatama Pustaka – Balai Layanan Perpustakaan DPAD DIY.",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}
