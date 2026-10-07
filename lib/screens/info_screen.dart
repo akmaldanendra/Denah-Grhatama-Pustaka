@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:url_launcher/url_launcher.dart';
 import '../main.dart';
 
 class InfoScreen extends StatelessWidget {
   const InfoScreen({super.key});
 
-  // ── URL helpers ────────────────────────────────────────────────────────────
   static const _websiteUrl  = 'https://balaiyanpus.jogjaprov.go.id';
-  // Pakai Google Maps universal link agar bisa fallback ke browser di semua device
-  static const _mapsUrl     = 'https://www.google.com/maps/search/?api=1&query=Grhatama+Pustaka+Jl+Janti+Banguntapan+Bantul+Yogyakarta';
+  static const _mapsUrl     = 'https://maps.app.goo.gl/grhatamapustaka';
+  static const _mapsFallback= 'https://www.google.com/maps/search/?api=1&query=Grhatama+Pustaka+Jl+Janti+Banguntapan+Bantul+Yogyakarta';
   static const _emailAddr   = 'balaiyanpus@jogjaprov.go.id';
   static const _phoneNumber = '+62274536234';
 
@@ -17,17 +17,13 @@ class InfoScreen extends StatelessWidget {
     final uri = Uri.parse(rawUrl);
     final scheme = uri.scheme.toLowerCase();
 
-    // Pilih LaunchMode yang tepat per skema:
-    // - mailto / tel : gunakan platformDefault agar OS menangani dengan app handler
-    // - https        : externalApplication di mobile, platformDefault di web
-    LaunchMode mode;
-    if (scheme == 'mailto' || scheme == 'tel') {
-      mode = LaunchMode.platformDefault;
-    } else if (kIsWeb) {
-      mode = LaunchMode.platformDefault;
-    } else {
-      mode = LaunchMode.externalApplication;
-    }
+    // Di web (termasuk mobile browser): semua scheme pakai platformDefault
+    // Di native app: externalApplication untuk https, platformDefault untuk mailto/tel
+    final mode = kIsWeb
+        ? LaunchMode.platformDefault
+        : (scheme == 'https' || scheme == 'http')
+            ? LaunchMode.externalApplication
+            : LaunchMode.platformDefault;
 
     bool launched = false;
     try {
@@ -36,20 +32,45 @@ class InfoScreen extends StatelessWidget {
       launched = false;
     }
 
+    // Fallback khusus maps: coba URL alternatif
+    if (!launched && rawUrl == _mapsUrl) {
+      try {
+        launched = await launchUrl(
+          Uri.parse(_mapsFallback),
+          mode: LaunchMode.platformDefault,
+        );
+      } catch (_) {
+        launched = false;
+      }
+    }
+
+    // Fallback khusus mailto di web: copy email ke clipboard
+    if (!launched && scheme == 'mailto' && kIsWeb) {
+      await Clipboard.setData(ClipboardData(text: _emailAddr));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Email disalin ke clipboard: balaiyanpus@jogjaprov.go.id'),
+            backgroundColor: const Color(0xFF1565C0),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+      return;
+    }
+
     if (!launched && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            scheme == 'mailto'
-                ? 'Aplikasi email tidak ditemukan di perangkat ini.'
-                : scheme == 'tel'
-                    ? 'Fitur telepon tidak tersedia di perangkat ini.'
-                    : 'Tidak bisa membuka link.',
+            scheme == 'tel'
+                ? 'Fitur telepon tidak tersedia di perangkat ini.'
+                : 'Tidak bisa membuka link.',
           ),
           backgroundColor: AppColors.primary,
           behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
     }
@@ -336,7 +357,7 @@ class InfoScreen extends StatelessWidget {
         title: 'Lokasi',
         subtitle: 'Jl. Janti, Banguntapan, Kabupaten Bantul,\nDI Yogyakarta 55198 Indonesia',
         color: AppColors.primary,
-        url: _mapsUrl,
+        url: _mapsFallback,
       ),
       _ContactItem(
         icon: Icons.email_rounded,
