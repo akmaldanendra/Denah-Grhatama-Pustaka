@@ -14,7 +14,7 @@ class MapScreen extends StatefulWidget {
 }
 
 class MapScreenState extends State<MapScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   int currentFloor = 1;
   RoomModel? selectedZone;
   bool _showRoomList = true;
@@ -22,35 +22,49 @@ class MapScreenState extends State<MapScreen>
   late AnimationController _panelAnim;
   late Animation<double> _panelSlide;
 
+  // Controller untuk animasi pulse pada marker selected
+  late AnimationController _pulseAnim;
+
+  // Controller untuk animasi smooth pan ke marker
+  AnimationController? _flyAnim;
+  Animation<Matrix4>? _flyMatrix;
+
   final TransformationController _transformController =
       TransformationController();
   final GlobalKey _viewerKey = GlobalKey();
 
-  final double originalWidth = 1200.0;
+  final double originalWidth  = 1200.0;
   final double originalHeight = 900.0;
 
-  // Cache list ruangan per lantai — dihitung sekali, tidak filter ulang tiap build
+  // Target zoom saat focus ke ruangan
+  static const double _focusScale = 2.2;
+
+  // Cache list ruangan per lantai
   static final Map<int, List<RoomModel>> _roomsByFloor = {
     1: masterRoomsData.where((r) => r.floor == 1).toList(),
     2: masterRoomsData.where((r) => r.floor == 2).toList(),
     3: masterRoomsData.where((r) => r.floor == 3).toList(),
   };
 
-  String get currentMapAsset => 'assets/images/lantai$currentFloor.jpeg';
+  String get currentMapAsset  => 'assets/images/lantai$currentFloor.jpeg';
   List<RoomModel> get currentFloorRooms => _roomsByFloor[currentFloor] ?? [];
 
   @override
   void initState() {
     super.initState();
+
     _panelAnim = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
       value: 1.0,
     );
-    _panelSlide = CurvedAnimation(
-      parent: _panelAnim,
-      curve: Curves.easeInOut,
-    );
+    _panelSlide = CurvedAnimation(parent: _panelAnim, curve: Curves.easeInOut);
+
+    // Pulse loop untuk marker selected
+    _pulseAnim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat();
 
     if (widget.initialRoom != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -62,18 +76,16 @@ class MapScreenState extends State<MapScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Precache semua gambar peta di awal agar perpindahan lantai instan
     for (int i = 1; i <= 3; i++) {
-      precacheImage(
-        AssetImage('assets/images/lantai$i.jpeg'),
-        context,
-      );
+      precacheImage(AssetImage('assets/images/lantai$i.jpeg'), context);
     }
   }
 
   @override
   void dispose() {
     _panelAnim.dispose();
+    _pulseAnim.dispose();
+    _flyAnim?.dispose();
     _transformController.dispose();
     super.dispose();
   }
@@ -83,19 +95,67 @@ class MapScreenState extends State<MapScreen>
     _showRoomList ? _panelAnim.forward() : _panelAnim.reverse();
   }
 
+  // ── Smooth fly-to: animasikan TransformationController ke posisi marker ───
+  void _flyToRoom(RoomModel room) {
+    final RenderBox? viewerBox =
+        _viewerKey.currentContext?.findRenderObject() as RenderBox?;
+    if (viewerBox == null) return;
+
+    final viewerSize = viewerBox.size;
+
+    // Hitung Matrix4 target: scale ke _focusScale, posisikan marker di tengah viewport
+    final double targetX = room.xRatio * originalWidth;
+    final double targetY = room.yRatio * originalHeight;
+
+    // Seberapa besar gambar di-fit ke viewer (FittedBox contain)
+    final double fitScale = (viewerSize.width / originalWidth)
+        .clamp(0.0, viewerSize.height / originalHeight);
+
+    final double finalScale = _focusScale;
+
+    // Terjemahkan agar titik (targetX, targetY) ada di tengah viewport
+    final double tx = viewerSize.width  / 2 - targetX * fitScale * finalScale;
+    final double ty = viewerSize.height / 2 - targetY * fitScale * finalScale;
+
+    final Matrix4 target = Matrix4.identity()
+      ..translate(tx, ty)
+      ..scale(finalScale);
+
+    final Matrix4 start = _transformController.value.clone();
+
+    _flyAnim?.dispose();
+    _flyAnim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+
+    _flyMatrix = Matrix4Tween(begin: start, end: target).animate(
+      CurvedAnimation(parent: _flyAnim!, curve: Curves.easeInOutCubic),
+    )..addListener(() {
+        _transformController.value = _flyMatrix!.value;
+      });
+
+    _flyAnim!.forward();
+  }
+
   /// Publik — dipanggil dari HomeScreen saat navigasi dari halaman daftar
   void focusRoom(RoomModel room) {
     setState(() {
       currentFloor = room.floor;
       selectedZone = room;
     });
-    Future.delayed(const Duration(milliseconds: 120), () {
-      if (mounted) _showDetail(room);
+    // Fly dulu, lalu tampilkan sheet
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _flyToRoom(room);
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) _showDetail(room);
+      });
     });
   }
 
   void _showDetail(RoomModel room) {
     setState(() => selectedZone = room);
+    _flyToRoom(room);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -122,8 +182,7 @@ class MapScreenState extends State<MapScreen>
   // ── AppBar ─────────────────────────────────────────────────────────────────
   PreferredSizeWidget _buildAppBar(bool isDark) {
     return AppBar(
-      backgroundColor:
-          isDark ? AppColors.darkHeader : AppColors.primary,
+      backgroundColor: isDark ? AppColors.darkHeader : AppColors.primary,
       title: Row(
         children: [
           Image.asset(
@@ -143,16 +202,12 @@ class MapScreenState extends State<MapScreen>
               Text(
                 'Grhatama Pustaka',
                 style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white),
+                    fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white),
               ),
               Text(
                 'Peta Interaktif',
                 style: TextStyle(
-                    fontSize: 9,
-                    color: Colors.white60,
-                    fontWeight: FontWeight.w400),
+                    fontSize: 9, color: Colors.white60, fontWeight: FontWeight.w400),
               ),
             ],
           ),
@@ -210,9 +265,7 @@ class MapScreenState extends State<MapScreen>
   Widget _buildNarrowLayout(bool isDark) {
     return Column(
       children: [
-        // Peta
         Expanded(child: _buildMapArea(isDark, isWide: false)),
-        // Panel ruangan — muncul di bawah peta, bukan overlay
         SizeTransition(
           sizeFactor: _panelSlide,
           axisAlignment: -1,
@@ -225,7 +278,7 @@ class MapScreenState extends State<MapScreen>
     );
   }
 
-  // ── Area peta (TANPA legenda overlay di mobile) ────────────────────────────
+  // ── Area peta ──────────────────────────────────────────────────────────────
   Widget _buildMapArea(bool isDark, {required bool isWide}) {
     return Stack(
       children: [
@@ -250,10 +303,8 @@ class MapScreenState extends State<MapScreen>
                     children: [
                       GestureDetector(
                         onTapDown: (d) {
-                          final xR = (d.localPosition.dx / originalWidth)
-                              .clamp(0.0, 1.0);
-                          final yR = (d.localPosition.dy / originalHeight)
-                              .clamp(0.0, 1.0);
+                          final xR = (d.localPosition.dx / originalWidth).clamp(0.0, 1.0);
+                          final yR = (d.localPosition.dy / originalHeight).clamp(0.0, 1.0);
                           debugPrint(
                               'KLIK Lt$currentFloor x:${xR.toStringAsFixed(3)} y:${yR.toStringAsFixed(3)}');
                         },
@@ -279,7 +330,6 @@ class MapScreenState extends State<MapScreen>
           ),
         ),
 
-        // Floor selector vertikal — kanan tengah
         Positioned(
           right: 12,
           top: 0,
@@ -287,7 +337,6 @@ class MapScreenState extends State<MapScreen>
           child: Center(child: _buildFloorSelector(isDark)),
         ),
 
-        // Legenda — hanya tampil di wide layout (overlay kiri bawah)
         if (isWide)
           Positioned(
             bottom: 56,
@@ -295,7 +344,6 @@ class MapScreenState extends State<MapScreen>
             child: _buildLegend(isDark),
           ),
 
-        // Reset zoom
         Positioned(
           bottom: 12,
           right: 12,
@@ -305,49 +353,120 @@ class MapScreenState extends State<MapScreen>
     );
   }
 
-  // ── Marker ─────────────────────────────────────────────────────────────────
+  // ── Marker dengan pulse animation ─────────────────────────────────────────
   Widget _buildMarker(RoomModel room) {
     final bool isSelected = selectedZone?.code == room.code;
-    final double size = isSelected ? 46 : 34;
+    // Ukuran dasar marker — sedikit lebih besar dari sebelumnya
+    const double baseSize   = 36.0;
+    const double selectSize = 46.0;
+    final double size = isSelected ? selectSize : baseSize;
 
-    return Positioned(
-      left: (room.xRatio * originalWidth) - size / 2,
-      top: (room.yRatio * originalHeight) - size / 2,
-      child: GestureDetector(
-        onTap: () => _showDetail(room),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            color: room.color,
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: Colors.white,
-              width: isSelected ? 3.0 : 2.0,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isSelected
-                    ? room.color.withValues(alpha: 0.55)
-                    : Colors.black26,
-                blurRadius: isSelected ? 14 : 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
+    final markerWidget = GestureDetector(
+      onTap: () => _showDetail(room),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutBack,
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: room.color,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: Colors.white,
+            width: isSelected ? 3.5 : 2.0,
           ),
-          child: Center(
-            child: Text(
-              room.code,
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: isSelected ? 10.5 : 8.5,
-              ),
+          boxShadow: [
+            BoxShadow(
+              color: isSelected
+                  ? room.color.withValues(alpha: 0.6)
+                  : Colors.black.withValues(alpha: 0.3),
+              blurRadius: isSelected ? 16 : 5,
+              spreadRadius: isSelected ? 2 : 0,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Text(
+            room.code,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: isSelected ? 10.5 : 8.5,
             ),
           ),
         ),
       ),
+    );
+
+    // Kalau selected, wrap dengan pulse ring
+    if (isSelected) {
+      // Ukuran total area termasuk pulse ring
+      const double pulseArea = selectSize + 36;
+      return Positioned(
+        // Posisikan agar pusat pulse tepat di koordinat room
+        left: (room.xRatio * originalWidth) - pulseArea / 2,
+        top:  (room.yRatio * originalHeight) - pulseArea / 2,
+        child: SizedBox(
+          width: pulseArea,
+          height: pulseArea,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Ring 1 — lebih besar, fase awal
+              AnimatedBuilder(
+                animation: _pulseAnim,
+                builder: (context, child) {
+                  final t = _pulseAnim.value;
+                  return Opacity(
+                    opacity: (1 - t).clamp(0.0, 0.5),
+                    child: Container(
+                      width:  selectSize + 4 + t * 32,
+                      height: selectSize + 4 + t * 32,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: room.color,
+                          width: 2.5,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              // Ring 2 — delay setengah siklus untuk efek berkelanjutan
+              AnimatedBuilder(
+                animation: _pulseAnim,
+                builder: (context, child) {
+                  final t = ((_pulseAnim.value + 0.5) % 1.0);
+                  return Opacity(
+                    opacity: (1 - t).clamp(0.0, 0.45),
+                    child: Container(
+                      width:  selectSize + 4 + t * 32,
+                      height: selectSize + 4 + t * 32,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: room.color.withValues(alpha: 0.7),
+                          width: 2.0,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              // Marker itu sendiri
+              markerWidget,
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Positioned(
+      left: (room.xRatio * originalWidth) - size / 2,
+      top:  (room.yRatio * originalHeight) - size / 2,
+      child: markerWidget,
     );
   }
 
@@ -394,8 +513,7 @@ class MapScreenState extends State<MapScreen>
                   border: active
                       ? null
                       : Border.all(
-                          color:
-                              isDark ? Colors.white12 : Colors.black12),
+                          color: isDark ? Colors.white12 : Colors.black12),
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -403,8 +521,7 @@ class MapScreenState extends State<MapScreen>
                     Text(
                       'Lt',
                       style: TextStyle(
-                        color:
-                            active ? Colors.white60 : inactiveText,
+                        color: active ? Colors.white60 : inactiveText,
                         fontSize: 9,
                         fontWeight: FontWeight.w500,
                       ),
@@ -440,8 +557,8 @@ class MapScreenState extends State<MapScreen>
     final bg = isDark
         ? const Color(0xFF1E293B).withValues(alpha: 0.95)
         : Colors.white.withValues(alpha: 0.95);
-    final textColor = isDark ? Colors.white60 : Colors.black54;
-    final titleColor = isDark ? Colors.white : Colors.black87;
+    final textColor  = isDark ? Colors.white60 : Colors.black54;
+    final titleColor = isDark ? Colors.white   : Colors.black87;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -449,10 +566,7 @@ class MapScreenState extends State<MapScreen>
         color: bg,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 8,
-          ),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8),
         ],
       ),
       child: Column(
@@ -464,13 +578,9 @@ class MapScreenState extends State<MapScreen>
             children: [
               Icon(Icons.info_outline_rounded, size: 11, color: titleColor),
               const SizedBox(width: 4),
-              Text(
-                'Legenda',
-                style: TextStyle(
-                    color: titleColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11),
-              ),
+              Text('Legenda',
+                  style: TextStyle(
+                      color: titleColor, fontWeight: FontWeight.w700, fontSize: 11)),
             ],
           ),
           const SizedBox(height: 6),
@@ -484,15 +594,11 @@ class MapScreenState extends State<MapScreen>
                     width: 11,
                     height: 11,
                     decoration: BoxDecoration(
-                      color: item.color,
-                      shape: BoxShape.circle,
-                    ),
+                        color: item.color, shape: BoxShape.circle),
                   ),
                   const SizedBox(width: 6),
-                  Text(
-                    RoomColors.labelFromCategory(item.category),
-                    style: TextStyle(color: textColor, fontSize: 10),
-                  ),
+                  Text(RoomColors.labelFromCategory(item.category),
+                      style: TextStyle(color: textColor, fontSize: 10)),
                 ],
               ),
             ),
@@ -510,21 +616,24 @@ class MapScreenState extends State<MapScreen>
       backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
       foregroundColor: isDark ? Colors.white70 : Colors.black54,
       elevation: 2,
-      onPressed: () => _transformController.value = Matrix4.identity(),
+      onPressed: () {
+        _flyAnim?.stop();
+        _transformController.value = Matrix4.identity();
+      },
       child: const Icon(Icons.center_focus_strong_rounded, size: 19),
     );
   }
 
   // ── Panel keterangan ruangan ───────────────────────────────────────────────
   Widget _buildRoomPanel(bool isDark, {required bool isWide}) {
-    final rooms = currentFloorRooms;
-    final bg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final headerBg =
-        isDark ? AppColors.darkHeader : AppColors.primary;
-    final textPrimary = isDark ? Colors.white : Colors.black87;
-    final textSec = isDark ? Colors.white60 : Colors.black45;
-    final dividerColor =
-        isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.06);
+    final rooms        = currentFloorRooms;
+    final bg           = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final headerBg     = isDark ? AppColors.darkHeader    : AppColors.primary;
+    final textPrimary  = isDark ? Colors.white            : Colors.black87;
+    final textSec      = isDark ? Colors.white60          : Colors.black45;
+    final dividerColor = isDark
+        ? Colors.white10
+        : Colors.black.withValues(alpha: 0.06);
 
     return Container(
       decoration: BoxDecoration(
@@ -546,7 +655,6 @@ class MapScreenState extends State<MapScreen>
       ),
       child: Column(
         children: [
-          // Header
           Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
@@ -582,19 +690,17 @@ class MapScreenState extends State<MapScreen>
             ),
           ),
 
-          // Legenda hanya di mobile panel (bukan overlay peta)
           if (!isWide) _buildLegendRow(isDark),
 
-          // List ruangan
           Expanded(
             child: ListView.separated(
               padding: const EdgeInsets.only(bottom: 8),
               itemCount: rooms.length,
-              separatorBuilder: (context, index) =>
+              separatorBuilder: (_, __) =>
                   Divider(height: 1, color: dividerColor, indent: 14),
               itemBuilder: (context, index) {
-                final room = rooms[index];
-                final bool isSel = selectedZone?.code == room.code;
+                final room  = rooms[index];
+                final isSel = selectedZone?.code == room.code;
 
                 return Material(
                   color: Colors.transparent,
@@ -611,8 +717,7 @@ class MapScreenState extends State<MapScreen>
                             : Colors.transparent,
                         border: Border(
                           left: BorderSide(
-                            color:
-                                isSel ? room.color : Colors.transparent,
+                            color: isSel ? room.color : Colors.transparent,
                             width: 3.5,
                           ),
                         ),
@@ -657,9 +762,7 @@ class MapScreenState extends State<MapScreen>
                             size: 17,
                             color: isSel
                                 ? room.color
-                                : (isDark
-                                    ? Colors.white24
-                                    : Colors.black26),
+                                : (isDark ? Colors.white24 : Colors.black26),
                           ),
                         ],
                       ),
@@ -674,7 +777,7 @@ class MapScreenState extends State<MapScreen>
     );
   }
 
-  // ── Legenda horizontal (mobile, di dalam panel) ────────────────────────────
+  // ── Legenda horizontal (mobile panel) ────────────────────────────────────
   Widget _buildLegendRow(bool isDark) {
     const items = [
       _LegendItem(RoomCategory.koleksi,   RoomColors.koleksi),
@@ -683,8 +786,7 @@ class MapScreenState extends State<MapScreen>
       _LegendItem(RoomCategory.loker,     RoomColors.loker),
       _LegendItem(RoomCategory.cafetaria, RoomColors.cafetaria),
     ];
-
-    final bg = isDark
+    final bg        = isDark
         ? const Color(0xFF0F172A).withValues(alpha: 0.6)
         : const Color(0xFFF0F4FF);
     final textColor = isDark ? Colors.white54 : Colors.black45;
@@ -706,9 +808,7 @@ class MapScreenState extends State<MapScreen>
                     width: 10,
                     height: 10,
                     decoration: BoxDecoration(
-                      color: item.color,
-                      shape: BoxShape.circle,
-                    ),
+                        color: item.color, shape: BoxShape.circle),
                   ),
                   const SizedBox(width: 4),
                   Text(
