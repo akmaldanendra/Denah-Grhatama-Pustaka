@@ -27,11 +27,8 @@ jobs:
       - name: Build Flutter Web
         run: flutter build web --release --no-tree-shake-icons
 
-      - name: Install Vercel CLI
-        run: npm install -g vercel@47.2.2
-
       - name: Deploy to Vercel
-        run: vercel deploy ./build/web --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
+        run: npx vercel@62 deploy ./build/web --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
