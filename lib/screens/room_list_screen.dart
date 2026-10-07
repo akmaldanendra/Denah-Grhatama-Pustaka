@@ -3,6 +3,7 @@ import '../main.dart';
 import '../models/room_model.dart';
 import '../data/room_data.dart';
 import '../widgets/room_detail_sheet.dart';
+import '../utils/floor_label.dart';
 import 'home_screen.dart';
 
 class RoomListScreen extends StatefulWidget {
@@ -21,8 +22,8 @@ class _RoomListScreenState extends State<RoomListScreen>
   RoomCategory? _activeCategory;
   String _query = '';
 
-  // Tab: 0 = semua lantai, 1/2/3 = per lantai
-  static const _tabs = ['Semua', 'Lantai 1', 'Lantai 2', 'Lantai 3'];
+  // Tab: 0=semua, 1=Lantai Dasar, 2=Lantai 1, 3=Lantai 2
+  static const _tabs = ['Semua', 'Lantai Dasar', 'Lantai 1', 'Lantai 2'];
 
   @override
   void initState() {
@@ -415,7 +416,7 @@ class _RoomCard extends StatelessWidget {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              'Lt. ${room.floor}',
+                              floorLabelShort(room.floor),
                               style: TextStyle(
                                 color: textSec,
                                 fontSize: 10.5,

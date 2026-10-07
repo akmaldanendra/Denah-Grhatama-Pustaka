@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 import '../main.dart';
 import '../models/room_model.dart';
 import '../data/room_data.dart';
 import '../widgets/room_detail_sheet.dart';
+import '../utils/floor_label.dart';
 
 class MapScreen extends StatefulWidget {
   final RoomModel? initialRoom;
@@ -46,7 +48,7 @@ class MapScreenState extends State<MapScreen>
     3: masterRoomsData.where((r) => r.floor == 3).toList(),
   };
 
-  String get currentMapAsset  => 'assets/images/lantai$currentFloor.jpeg';
+  String get currentMapAsset => 'assets/images/lantai$currentFloor.png';
   List<RoomModel> get currentFloorRooms => _roomsByFloor[currentFloor] ?? [];
 
   @override
@@ -76,8 +78,10 @@ class MapScreenState extends State<MapScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    for (int i = 1; i <= 3; i++) {
-      precacheImage(AssetImage('assets/images/lantai$i.jpeg'), context);
+    // Precache semua gambar peta di awal agar perpindahan lantai instan
+    precacheImage(const AssetImage('assets/images/lantai1.png'), context);
+    for (int i = 2; i <= 3; i++) {
+      precacheImage(AssetImage('assets/images/lantai$i.png'), context);
     }
   }
 
@@ -302,12 +306,7 @@ class MapScreenState extends State<MapScreen>
                     clipBehavior: Clip.none,
                     children: [
                       GestureDetector(
-                        onTapDown: (d) {
-                          final xR = (d.localPosition.dx / originalWidth).clamp(0.0, 1.0);
-                          final yR = (d.localPosition.dy / originalHeight).clamp(0.0, 1.0);
-                          debugPrint(
-                              'KLIK Lt$currentFloor x:${xR.toStringAsFixed(3)} y:${yR.toStringAsFixed(3)}');
-                        },
+                        onTapDown: (_) {}, // reserved untuk debug koordinat
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(12),
                           child: Image.asset(
@@ -339,10 +338,17 @@ class MapScreenState extends State<MapScreen>
 
         if (isWide)
           Positioned(
-            bottom: 56,
+            bottom: 108,
             left: 14,
             child: _buildLegend(isDark),
           ),
+
+        // Kompas — kiri bawah
+        Positioned(
+          bottom: 12,
+          left: 14,
+          child: _buildCompass(isDark),
+        ),
 
         Positioned(
           bottom: 12,
@@ -476,6 +482,9 @@ class MapScreenState extends State<MapScreen>
     final activeColor = AppColors.primary;
     final inactiveText = isDark ? Colors.white54 : Colors.black45;
 
+    // Urutan tampilan dari atas: lantai tertinggi dulu
+    final floors = [3, 2, 1];
+
     return Container(
       decoration: BoxDecoration(
         color: bg,
@@ -491,8 +500,11 @@ class MapScreenState extends State<MapScreen>
       padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 3),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        children: [3, 2, 1].map((floor) {
+        children: floors.map((floor) {
           final bool active = currentFloor == floor;
+          final label = floorLabelShort(floor); // "Dasar", "Lt. 1", "Lt. 2"
+          // Pisah jadi dua baris: prefix & angka/teks
+          final bool isDasar = floor == 1;
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 3),
             child: GestureDetector(
@@ -505,8 +517,8 @@ class MapScreenState extends State<MapScreen>
               },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                width: 44,
-                height: 36,
+                width: 48,
+                height: isDasar ? 42 : 38,
                 decoration: BoxDecoration(
                   color: active ? activeColor : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
@@ -515,27 +527,40 @@ class MapScreenState extends State<MapScreen>
                       : Border.all(
                           color: isDark ? Colors.white12 : Colors.black12),
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Lt',
-                      style: TextStyle(
-                        color: active ? Colors.white60 : inactiveText,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    Text(
-                      '$floor',
-                      style: TextStyle(
-                        color: active ? Colors.white : inactiveText,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        height: 1.0,
-                      ),
-                    ),
-                  ],
+                child: Center(
+                  child: isDasar
+                      ? Text(
+                          'Dasar',
+                          style: TextStyle(
+                            color: active ? Colors.white : inactiveText,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            height: 1.0,
+                          ),
+                          textAlign: TextAlign.center,
+                        )
+                      : Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Lt.',
+                              style: TextStyle(
+                                color: active ? Colors.white60 : inactiveText,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Text(
+                              label.replaceAll('Lt. ', ''),
+                              style: TextStyle(
+                                color: active ? Colors.white : inactiveText,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                height: 1.0,
+                              ),
+                            ),
+                          ],
+                        ),
                 ),
               ),
             ),
@@ -624,6 +649,32 @@ class MapScreenState extends State<MapScreen>
     );
   }
 
+  // ── Kompas arah mata angin ─────────────────────────────────────────────────
+  Widget _buildCompass(bool isDark) {
+    final bg = isDark
+        ? const Color(0xFF1E293B).withValues(alpha: 0.92)
+        : Colors.white.withValues(alpha: 0.95);
+    final shadow = isDark ? Colors.black45 : Colors.black12;
+
+    return Container(
+      width: 72,
+      height: 72,
+      decoration: BoxDecoration(
+        color: bg,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(color: shadow, blurRadius: 10, offset: const Offset(0, 3)),
+        ],
+      ),
+      child: CustomPaint(
+        painter: _CompassPainter(
+          primaryColor: AppColors.primary,
+          isDark: isDark,
+        ),
+      ),
+    );
+  }
+
   // ── Panel keterangan ruangan ───────────────────────────────────────────────
   Widget _buildRoomPanel(bool isDark, {required bool isWide}) {
     final rooms        = currentFloorRooms;
@@ -666,7 +717,7 @@ class MapScreenState extends State<MapScreen>
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Ruangan — Lantai $currentFloor',
+                    'Ruangan — ${floorLabelFull(currentFloor)}',
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
@@ -847,7 +898,7 @@ class MapScreenState extends State<MapScreen>
             ),
             const SizedBox(height: 6),
             Text(
-              'Pastikan lantai$currentFloor.jpeg ada di assets/images/',
+              'Pastikan file gambar ${floorLabelFull(currentFloor)} ada di assets/images/',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: isDark ? Colors.white38 : Colors.black38,
@@ -866,3 +917,160 @@ class _LegendItem {
   final Color color;
   const _LegendItem(this.category, this.color);
 }
+
+// ── Compass CustomPainter ─────────────────────────────────────────────────────
+class _CompassPainter extends CustomPainter {
+  final Color primaryColor;
+  final bool isDark;
+
+  const _CompassPainter({required this.primaryColor, required this.isDark});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+
+    // ── Lingkaran luar tipis ──────────────────────────────────────────────
+    final ringPaint = Paint()
+      ..color = (isDark ? Colors.white : Colors.black).withValues(alpha: 0.08)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    canvas.drawCircle(center, radius - 2, ringPaint);
+
+    // ── Titik tengah ──────────────────────────────────────────────────────
+    final dotPaint = Paint()
+      ..color = (isDark ? Colors.white : Colors.black).withValues(alpha: 0.25)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(center, 3, dotPaint);
+
+    // ── 4 garis tick arah ─────────────────────────────────────────────────
+    final tickPaint = Paint()
+      ..color = (isDark ? Colors.white : Colors.black).withValues(alpha: 0.15)
+      ..strokeWidth = 1.0
+      ..strokeCap = StrokeCap.round;
+
+    for (final angle in [0.0, 90.0, 180.0, 270.0]) {
+      final rad = _deg2rad(angle - 90);
+      final inner = Offset(
+        center.dx + (radius * 0.45) * math.cos(rad),
+        center.dy + (radius * 0.45) * math.sin(rad),
+      );
+      final outer = Offset(
+        center.dx + (radius * 0.72) * math.cos(rad),
+        center.dy + (radius * 0.72) * math.sin(rad),
+      );
+      canvas.drawLine(inner, outer, tickPaint);
+    }
+
+    // ── Panah Utara (merah) — di BAWAH peta ─────────────────────────────
+    _drawArrow(
+      canvas: canvas,
+      center: center,
+      angleDeg: 90, // bawah = utara (sesuai orientasi peta)
+      length: radius * 0.52,
+      tipWidth: radius * 0.18,
+      color: primaryColor,
+      shadow: true,
+    );
+
+    // ── Panah Selatan (abu/gelap) — di ATAS peta ─────────────────────────
+    _drawArrow(
+      canvas: canvas,
+      center: center,
+      angleDeg: -90, // atas = selatan
+      length: radius * 0.42,
+      tipWidth: radius * 0.14,
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.35)
+          : Colors.black.withValues(alpha: 0.2),
+      shadow: false,
+    );
+
+    // ── Label U / S / T / B ───────────────────────────────────────────────
+    final labels = {
+       90.0: 'U',   // Utara — bawah
+      -90.0: 'S',   // Selatan — atas
+        0.0: 'T',   // Timur — kanan
+      180.0: 'B',   // Barat — kiri
+    };
+
+    labels.forEach((angleDeg, label) {
+      final isNorth = angleDeg == 90.0;
+      final rad = _deg2rad(angleDeg);
+      final pos = Offset(
+        center.dx + (radius * 0.82) * math.cos(rad),
+        center.dy + (radius * 0.82) * math.sin(rad),
+      );
+
+      final tp = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: TextStyle(
+            color: isNorth
+                ? primaryColor
+                : (isDark
+                    ? Colors.white.withValues(alpha: 0.55)
+                    : Colors.black.withValues(alpha: 0.45)),
+            fontSize: isNorth ? 11.0 : 9.0,
+            fontWeight: isNorth ? FontWeight.w800 : FontWeight.w600,
+            height: 1.0,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+
+      tp.paint(
+        canvas,
+        pos - Offset(tp.width / 2, tp.height / 2),
+      );
+    });
+  }
+
+  void _drawArrow({
+    required Canvas canvas,
+    required Offset center,
+    required double angleDeg,
+    required double length,
+    required double tipWidth,
+    required Color color,
+    required bool shadow,
+  }) {
+    final rad = _deg2rad(angleDeg);
+    final tip = Offset(
+      center.dx + length * math.cos(rad),
+      center.dy + length * math.sin(rad),
+    );
+    final base = Offset(
+      center.dx - (length * 0.15) * math.cos(rad),
+      center.dy - (length * 0.15) * math.sin(rad),
+    );
+    final perp = Offset(-math.sin(rad), math.cos(rad));
+    final left  = base + perp * tipWidth;
+    final right = base - perp * tipWidth;
+
+    final path = Path()
+      ..moveTo(tip.dx, tip.dy)
+      ..lineTo(left.dx, left.dy)
+      ..lineTo(center.dx, center.dy)
+      ..lineTo(right.dx, right.dy)
+      ..close();
+
+    if (shadow) {
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = color.withValues(alpha: 0.3)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+      );
+    }
+
+    canvas.drawPath(path, Paint()..color = color..style = PaintingStyle.fill);
+  }
+
+  double _deg2rad(double deg) => deg * (math.pi / 180.0);
+
+  @override
+  bool shouldRepaint(_CompassPainter old) =>
+      old.primaryColor != primaryColor || old.isDark != isDark;
+}
+

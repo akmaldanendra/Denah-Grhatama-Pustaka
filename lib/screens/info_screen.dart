@@ -7,11 +7,10 @@ import '../main.dart';
 class InfoScreen extends StatelessWidget {
   const InfoScreen({super.key});
 
-  static const _websiteUrl  = 'https://balaiyanpus.jogjaprov.go.id';
-  static const _mapsUrl     = 'https://maps.app.goo.gl/grhatamapustaka';
-  static const _mapsFallback= 'https://www.google.com/maps/search/?api=1&query=Grhatama+Pustaka+Jl+Janti+Banguntapan+Bantul+Yogyakarta';
-  static const _emailAddr   = 'balaiyanpus@jogjaprov.go.id';
-  static const _phoneNumber = '+62274536234';
+  static const _websiteUrl   = 'https://balaiyanpus.jogjaprov.go.id';
+  static const _mapsFallback = 'https://www.google.com/maps/search/?api=1&query=Grhatama+Pustaka+Jl+Janti+Banguntapan+Bantul+Yogyakarta';
+  static const _emailAddr    = 'balaiyanpus@jogjaprov.go.id';
+  static const _phoneNumber  = '+62274536234';
 
   Future<void> _open(BuildContext context, String rawUrl) async {
     final uri = Uri.parse(rawUrl);
@@ -30,18 +29,6 @@ class InfoScreen extends StatelessWidget {
       launched = await launchUrl(uri, mode: mode);
     } catch (_) {
       launched = false;
-    }
-
-    // Fallback khusus maps: coba URL alternatif
-    if (!launched && rawUrl == _mapsUrl) {
-      try {
-        launched = await launchUrl(
-          Uri.parse(_mapsFallback),
-          mode: LaunchMode.platformDefault,
-        );
-      } catch (_) {
-        launched = false;
-      }
     }
 
     // Fallback khusus mailto di web: copy email ke clipboard

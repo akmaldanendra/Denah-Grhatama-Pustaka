@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/room_model.dart';
+import '../utils/floor_label.dart';
 
 /// Bottom sheet detail ruangan ala Google Maps.
 /// [onShowOnMap] dipanggil ketika tombol "Lihat di Peta" ditekan.
@@ -133,7 +134,7 @@ class RoomDetailSheet extends StatelessWidget {
                     children: [
                       _InfoChip(
                         icon: Icons.layers_rounded,
-                        label: 'Lantai ${room.floor}',
+                        label: floorLabelFull(room.floor),
                         isDark: isDark,
                       ),
                       _InfoChip(
