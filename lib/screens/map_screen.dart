@@ -990,8 +990,8 @@ class _CompassPainter extends CustomPainter {
     final labels = {
        90.0: 'U',   // Utara — bawah
       -90.0: 'S',   // Selatan — atas
-        0.0: 'T',   // Timur — kanan
-      180.0: 'B',   // Barat — kiri
+      180.0: 'T',   // Timur — kiri
+        0.0: 'B',   // Barat — kanan
     };
 
     labels.forEach((angleDeg, label) {
