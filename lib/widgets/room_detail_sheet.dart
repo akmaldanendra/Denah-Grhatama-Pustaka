@@ -231,19 +231,48 @@ class _PhotoSection extends StatelessWidget {
   final bool isDark;
   const _PhotoSection({required this.room, required this.isDark});
 
+  void _openViewer(BuildContext context, int initialIndex) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierColor: Colors.black,
+        barrierDismissible: true,
+        pageBuilder: (_, __, ___) => _PhotoViewerPage(
+          images: room.images,
+          initialIndex: initialIndex,
+          roomName: room.name,
+        ),
+        transitionsBuilder: (_, anim, __, child) =>
+            FadeTransition(opacity: anim, child: child),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (room.images.isNotEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Foto Ruangan',
-            style: TextStyle(
-              color: isDark ? Colors.white : Colors.black87,
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-            ),
+          Row(
+            children: [
+              Text(
+                'Foto Ruangan',
+                style: TextStyle(
+                  color: isDark ? Colors.white : Colors.black87,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${room.images.length} foto',
+                style: TextStyle(
+                  color: isDark ? Colors.white38 : Colors.black38,
+                  fontSize: 12,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           SizedBox(
@@ -251,17 +280,43 @@ class _PhotoSection extends StatelessWidget {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: room.images.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 10),
-              itemBuilder: (context, i) => ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.asset(
-                  room.images[i],
-                  width: 225,
-                  height: 165,
-                  fit: BoxFit.cover,
-                  // Decode hanya sebesar ukuran display (225px) — hemat RAM signifikan
-                  cacheWidth: 450, // 2x untuk layar retina/HDPI
-                  errorBuilder: (context, error, stackTrace) => _photoPlaceholder(),
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, i) => GestureDetector(
+                onTap: () => _openViewer(context, i),
+                child: Hero(
+                  tag: 'photo_${room.code}_$i',
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Stack(
+                      children: [
+                        Image.asset(
+                          room.images[i],
+                          width: 225,
+                          height: 165,
+                          fit: BoxFit.cover,
+                          cacheWidth: 450,
+                          errorBuilder: (_, __, ___) => _photoPlaceholder(),
+                        ),
+                        // Overlay icon tap hint
+                        Positioned(
+                          right: 8,
+                          bottom: 8,
+                          child: Container(
+                            padding: const EdgeInsets.all(5),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.45),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.fullscreen_rounded,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -287,11 +342,8 @@ class _PhotoSection extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.add_photo_alternate_outlined,
-            size: 32,
-            color: isDark ? Colors.white24 : Colors.black26,
-          ),
+          Icon(Icons.add_photo_alternate_outlined,
+              size: 32, color: isDark ? Colors.white24 : Colors.black26),
           const SizedBox(height: 6),
           Text(
             'Foto belum tersedia',
@@ -313,8 +365,205 @@ class _PhotoSection extends StatelessWidget {
           ? Colors.white.withValues(alpha: 0.07)
           : Colors.black.withValues(alpha: 0.05),
       child: const Center(
-        child: Icon(Icons.broken_image_outlined,
-            color: Colors.white30, size: 32),
+        child: Icon(Icons.broken_image_outlined, color: Colors.white30, size: 32),
+      ),
+    );
+  }
+}
+
+// ── Full screen photo viewer ──────────────────────────────────────────────────
+class _PhotoViewerPage extends StatefulWidget {
+  final List<String> images;
+  final int initialIndex;
+  final String roomName;
+
+  const _PhotoViewerPage({
+    required this.images,
+    required this.initialIndex,
+    required this.roomName,
+  });
+
+  @override
+  State<_PhotoViewerPage> createState() => _PhotoViewerPageState();
+}
+
+class _PhotoViewerPageState extends State<_PhotoViewerPage> {
+  late PageController _pageCtrl;
+  late int _current;
+
+  @override
+  void initState() {
+    super.initState();
+    _current = widget.initialIndex;
+    _pageCtrl = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = widget.images.length;
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          // ── PageView foto ──────────────────────────────────────────────
+          PageView.builder(
+            controller: _pageCtrl,
+            itemCount: total,
+            onPageChanged: (i) => setState(() => _current = i),
+            itemBuilder: (context, i) => _ZoomablePage(
+              imagePath: widget.images[i],
+              heroTag: 'photo_${widget.roomName}_$i',
+            ),
+          ),
+
+          // ── Tombol tutup ───────────────────────────────────────────────
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 12,
+            left: 16,
+            child: GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.55),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.close_rounded,
+                    color: Colors.white, size: 22),
+              ),
+            ),
+          ),
+
+          // ── Counter foto (X / N) ───────────────────────────────────────
+          if (total > 1)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 16,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${_current + 1} / $total',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+          // ── Nama ruangan di bawah ──────────────────────────────────────
+          Positioned(
+            bottom: MediaQuery.of(context).padding.bottom + 20,
+            left: 20,
+            right: 20,
+            child: Text(
+              widget.roomName,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+
+          // ── Dot indicator ──────────────────────────────────────────────
+          if (total > 1)
+            Positioned(
+              bottom: MediaQuery.of(context).padding.bottom + 44,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(total, (i) {
+                  final active = i == _current;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: active ? 18 : 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: active
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  );
+                }),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Single zoomable photo page ────────────────────────────────────────────────
+class _ZoomablePage extends StatefulWidget {
+  final String imagePath;
+  final String heroTag;
+
+  const _ZoomablePage({required this.imagePath, required this.heroTag});
+
+  @override
+  State<_ZoomablePage> createState() => _ZoomablePageState();
+}
+
+class _ZoomablePageState extends State<_ZoomablePage> {
+  final TransformationController _ctrl = TransformationController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      // Double tap untuk reset zoom
+      onDoubleTap: () {
+        if (_ctrl.value != Matrix4.identity()) {
+          _ctrl.value = Matrix4.identity();
+        } else {
+          // Zoom in 2.5x ke tengah
+          final m = Matrix4.identity()..scale(2.5);
+          _ctrl.value = m;
+        }
+      },
+      child: InteractiveViewer(
+        transformationController: _ctrl,
+        minScale: 0.8,
+        maxScale: 5.0,
+        child: Center(
+          child: Hero(
+            tag: widget.heroTag,
+            child: Image.asset(
+              widget.imagePath,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Center(
+                child: Icon(Icons.broken_image_outlined,
+                    color: Colors.white30, size: 48),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
