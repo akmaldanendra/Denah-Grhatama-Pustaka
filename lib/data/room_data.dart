@@ -17,9 +17,9 @@ import '../models/room_model.dart';
 // Kategori:
 //   loker     = Loker Penitipan        (teal)
 //   koleksi   = Ruang Layanan/Koleksi  (amber)
-//   pertemuan = Ruang Pertemuan        (pink)
+//   pertemuan = Ruang Pertemuan        (pink gelap)
 //   kantor    = Kantor/Administrasi    (biru)
-//   cafetaria = Cafetaria              (ungu)
+//   cafetaria = Cafetaria              (pink muda)
 // ============================================================
 
 const List<RoomModel> masterRoomsData = [
@@ -34,8 +34,7 @@ const List<RoomModel> masterRoomsData = [
     category: RoomCategory.koleksi,
     desc: "Area bermain interaktif untuk anak-anak.",
     images: [
-      // 'assets/images/rooms/lantai1/1_1_a.jpg',
-      // 'assets/images/rooms/lantai1/1_1_b.jpg',
+
     ],
   ),
   RoomModel(
@@ -263,7 +262,12 @@ const List<RoomModel> masterRoomsData = [
     category: RoomCategory.cafetaria,
     desc: "Area kantin utama tempat makan & minum pengunjung.",
     images: [
-      // 'assets/images/rooms/lantai1/1_20_a.jpg',
+      'assets/images/rooms/lantai1/1_20_a.jpeg',
+      'assets/images/rooms/lantai1/1_20_b.jpeg',
+      'assets/images/rooms/lantai1/1_20_c.jpeg',
+      'assets/images/rooms/lantai1/1_20_d.jpeg',
+      'assets/images/rooms/lantai1/1_20_e.jpeg',
+      'assets/images/rooms/lantai1/1_20_f.jpeg',
     ],
   ),
 
