@@ -262,12 +262,12 @@ const List<RoomModel> masterRoomsData = [
     category: RoomCategory.cafetaria,
     desc: "Area kantin utama tempat makan & minum pengunjung.",
     images: [
-      'assets/images/rooms/lantai1/1_20_a.jpeg',
-      'assets/images/rooms/lantai1/1_20_b.jpeg',
-      'assets/images/rooms/lantai1/1_20_c.jpeg',
-      'assets/images/rooms/lantai1/1_20_d.jpeg',
-      'assets/images/rooms/lantai1/1_20_e.jpeg',
-      'assets/images/rooms/lantai1/1_20_f.jpeg',
+      'assets/images/rooms/lantai1/1_20_a.webp',
+      'assets/images/rooms/lantai1/1_20_b.webp',
+      'assets/images/rooms/lantai1/1_20_c.webp',
+      'assets/images/rooms/lantai1/1_20_d.webp',
+      'assets/images/rooms/lantai1/1_20_e.webp',
+      'assets/images/rooms/lantai1/1_20_f.webp',
     ],
   ),
 
